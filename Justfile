@@ -352,10 +352,7 @@ iso:
     # ARCH_SHORT needs to be uppercase
     ARCH_SHORT="$(echo {{ arch }} | sed 's/x86_64/x64/g' | sed 's/aarch64/aa64/g')"
     ARCH_32="$(echo {{ arch }} | sed 's/x86_64/ia32/g' | sed 's/aarch64/arm/g')"
-    if [[ "$(rpm -E %centos)" -ge 10 ]]; then
-        cp -avf /boot/efi/EFI/centos/. $ISOROOT/EFI/BOOT
-    elif [[ "$(rpm -E %fedora)" -ge 41 ]]; then
-        cp -avf /boot/efi/EFI/fedora/. $ISOROOT/EFI/BOOT
+    cp -avf /boot/efi/EFI/{{ builder_distro }}/. $ISOROOT/EFI/BOOT
     fi
     cp -avf $ISOROOT/boot/grub/grub.cfg $ISOROOT/EFI/BOOT/BOOT.conf
     cp -avf $ISOROOT/boot/grub/grub.cfg $ISOROOT/EFI/BOOT/grub.cfg

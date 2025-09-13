@@ -5,11 +5,8 @@ isoroot := env("TITANOBOA_ISO_ROOT", "work/iso-root")
 rootfs := workdir/"rootfs"
 default_image := "ghcr.io/ublue-os/bluefin:lts"
 arch := arch()
-### BUILDER CONFIGURATION ###
-# Distribution to use for the builder container (for tools and dependencies)
-# Supported values: fedora, centos, almalinux
-# Set via TITANOBOA_BUILDER_DISTRO environment variable (default: fedora)
 builder_distro := env("TITANOBOA_BUILDER_DISTRO", "fedora")
+platform := env("TITANOBOA_PLATFORM", if arch == "x86_64" { "linux/amd64" } else if arch == "aarch64" { "linux/arm64" } else { error("Unsupported architecture: " + arch + ". Supported: x86_64, aarch64") })
 ##############################
 
 ### HOOKS SCRIPT PATHS ###
@@ -47,6 +44,7 @@ function chroot(){
     shift
     local args="$*"
     ' + PODMAN + ' run --rm -it \
+    --platform ' + platform + ' \
     --privileged \
     --security-opt label=type:unconfined_t \
     $args \
@@ -64,6 +62,7 @@ function builder(){
     shift
     local args="$*"
     ' + PODMAN + ' run --rm -it \
+    --platform ' + platform + ' \
     --privileged \
     --security-opt label=disable \
     --volume ' + git_root + ':/app \
@@ -140,8 +139,8 @@ rootfs image=default_image:
     {{ _ci_grouping }}
     set -xeuo pipefail
     # Pull and Extract Filesystem
-    {{ PODMAN }} pull {{ image }} # Pull newer image
-    ctr="$({{ PODMAN }} create --rm {{ image }} /usr/bin/bash)" && trap "{{ PODMAN }} rm $ctr" EXIT
+    {{ PODMAN }} pull --platform {{ platform }} {{ image }} # Pull newer image
+    ctr="$({{ PODMAN }} create --platform {{ platform }} --rm {{ image }} /usr/bin/bash)" && trap "{{ PODMAN }} rm $ctr" EXIT
     {{ PODMAN }} export $ctr | tar --xattrs-include='*' -p -xf - -C {{ rootfs }}
 
     # Make /var/tmp be a tmpfs by symlinking to /tmp,
@@ -171,7 +170,7 @@ rootfs-include-container container_image=default_image image=default_image:
     set -euo pipefail
     CMD="set -xeuo pipefail
     mkdir -p /var/lib/containers/storage
-    podman pull {{ container_image || image }}
+    podman pull --platform {{ platform }} {{ container_image || image }}
     dnf install -y fuse-overlayfs"
     chroot "$CMD"
 
@@ -280,6 +279,7 @@ rootfs-selinux-fix image=default_image:
     setfiles -F -r . /etc/selinux/targeted/contexts/files/file_contexts .
     chcon --user=system_u --recursive .'
     {{ PODMAN }} run --rm -it \
+        --platform {{ platform }} \
         --volume {{ git_root }}:/app \
         --workdir "/app" \
         --security-opt label=disable \
@@ -457,6 +457,7 @@ iso:
     echo "rootfs             := {{ rootfs }}"
     echo "builder_distro     := {{ builder_distro }}"
     echo "builder_image      := {{ builder_image }}"
+    echo "platform           := {{ platform }}"
     echo "HOOK_post_rootfs   := {{ if HOOK_post_rootfs =~ '(^$|^(?i)\bnone\b$)' { '' } else { canonicalize(HOOK_post_rootfs) } }}"
     echo "HOOK_pre_initramfs := {{ if HOOK_pre_initramfs =~ '(^$|^(?i)\bnone\b$)' { '' } else { canonicalize(HOOK_pre_initramfs) } }}"
     echo "image              := {{ image }}"
@@ -545,7 +546,7 @@ container-run-vm ISO_FILE:
     run_args+=(ghcr.io/qemus/qemu)
 
     # Run the VM and open the browser to connect
-    {{ PODMAN }} run "${run_args[@]}" &
+    {{ PODMAN }} run --platform {{ platform }} "${run_args[@]}" &
     xdg-open http://localhost:${port}
 
 # Print the absolute of the files relative to the project dir.

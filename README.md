@@ -27,7 +27,7 @@ just vm ./output.iso
 
 ### Builder Distribution Support
 
-By default, Titanoboa uses Fedora containers for building tools and dependencies. You can now specify different builder distributions using the `TITANOBOA_BUILDER_DISTRO` environment variable:
+By default, Titanoboa uses Fedora containers for building tools and dependencies. You can specify different builder distributions using the `TITANOBOA_BUILDER_DISTRO` environment variable:
 
 - **fedora** (default): Uses `quay.io/fedora/fedora:latest`
 - **centos**: Uses `ghcr.io/hanthor/centos-anaconda-builder:main`
@@ -39,6 +39,22 @@ TITANOBOA_BUILDER_DISTRO=centos just build ghcr.io/ublue-os/bluefin:lts
 
 # Use Fedora (default)
 just build ghcr.io/ublue-os/bluefin:lts
+```
+
+### Platform Support
+
+Titanoboa supports specifying the platform for container images using the `TITANOBOA_PLATFORM` environment variable.
+
+Examples:
+```bash
+# Build with AMD64 v2 platform on EL10 base images
+TITANOBOA_PLATFORM=linux/amd64/v2 TITANOBOA_BUILDER_DISTRO=almalinux just build ghcr.io/tuna-os/albacore:latest
+
+# Build with standard AMD64 platform (default)
+just build ghcr.io/ublue-os/bluefin:lts
+
+# Build with ARM64 platform
+TITANOBOA_PLATFORM=linux/arm64 just build ghcr.io/ublue-os/bluefin:lts
 ```
 
 ## Contributor Metrics

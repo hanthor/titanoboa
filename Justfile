@@ -457,7 +457,7 @@ iso:
 [doc('Build a live-iso')]
 @build image=default_image livesys="1" flatpaks_file="src/flatpaks.example.txt" compression="squashfs" extra_kargs="NONE" container_image=image polkit="1" flatpak_image="": \
     checkroot \
-    (show-config image livesys flatpaks_file compression extra_kargs container_image polkit) \
+    (show-config image livesys flatpaks_file compression extra_kargs container_image polkit flatpak_image) \
     clean \
     init-work \
     (rootfs image) \

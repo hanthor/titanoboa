@@ -176,20 +176,49 @@ rootfs-include-container container_image=default_image image=default_image:
     chroot "$CMD"
 
 # Install Flatpaks into the live system
-rootfs-include-flatpaks FLATPAKS_FILE="src/flatpaks.example.txt":
+rootfs-include-flatpaks FLATPAKS_FILE="src/flatpaks.example.txt" FLATPAK_IMAGE="":
     #!/usr/bin/env bash
     {{ _ci_grouping }}
     {{ if FLATPAKS_FILE =~ '(^$|^(?i)\bnone\b$)' { 'exit 0' } else if path_exists(FLATPAKS_FILE) == 'false' { error('Flatpak file inaccessible: ' + FLATPAKS_FILE) } else { '' } }}
+    
+    # If FLATPAK_IMAGE is provided, pull and prepare it
+    REPO_ARGS=""
+    CTR=""
+    if [[ -n "{{ FLATPAK_IMAGE }}" ]]; then
+        echo "Using Flatpak Image: {{ FLATPAK_IMAGE }}"
+        {{ PODMAN }} pull {{ FLATPAK_IMAGE }}
+        CTR=$({{ PODMAN }} create {{ FLATPAK_IMAGE }})
+        # Copy the repo out to a temporary directory
+        mkdir -p {{ workdir }}/flatpak-repo
+        {{ PODMAN }} cp $CTR:/var/lib/flatpak/repo/. {{ workdir }}/flatpak-repo
+        {{ PODMAN }} rm $CTR
+        REPO_ARGS="--volume {{ absolute_path(workdir) }}/flatpak-repo:/tmp/flatpak-repo"
+    fi
+
     {{ chroot_function }}
     CMD='set -xeuo pipefail
     mkdir -p /var/lib/flatpak
     dnf install -y flatpak
 
     # Get Flatpaks
-    flatpak remote-add --if-not-exists flathub "https://dl.flathub.org/repo/flathub.flatpakrepo"
-    grep -v "#.*" /flatpak-list/$(basename {{ FLATPAKS_FILE }}) | sort --reverse | xargs "-i{}" -d "\n" sh -c "flatpak remote-info --arch={{ arch }} --system flathub {} &>/dev/null && flatpak install --noninteractive -y {}" || true'
+    if [[ -d /tmp/flatpak-repo ]]; then
+        flatpak remote-add --system --no-gpg-verify local-repo file:///tmp/flatpak-repo
+        REMOTE="local-repo"
+    else
+        flatpak remote-add --if-not-exists flathub "https://dl.flathub.org/repo/flathub.flatpakrepo"
+        REMOTE="flathub"
+    fi
+
+    grep -v "#.*" /flatpak-list/$(basename {{ FLATPAKS_FILE }}) | sort --reverse | xargs "-i{}" -d "\n" sh -c "flatpak remote-info --arch={{ arch }} --system $REMOTE {} &>/dev/null && flatpak install --noninteractive -y $REMOTE {}" || true
+    
+    if [[ "$REMOTE" == "local-repo" ]]; then
+        flatpak remote-delete --system local-repo
+        # Re-add flathub for the user
+        flatpak remote-add --if-not-exists flathub "https://dl.flathub.org/repo/flathub.flatpakrepo"
+    fi'
+    
     set -euo pipefail
-    chroot "$CMD" --volume "$(realpath "$(dirname {{ FLATPAKS_FILE }})")":/flatpak-list
+    chroot "$CMD" --volume "$(realpath "$(dirname {{ FLATPAKS_FILE }})")":/flatpak-list $REPO_ARGS
 
 # Install polkit rules
 rootfs-include-polkit polkit="1":
@@ -426,7 +455,7 @@ iso:
 # TODO update this recipe parameters. Make it actually usable
 [no-exit-message]
 [doc('Build a live-iso')]
-@build image=default_image livesys="1" flatpaks_file="src/flatpaks.example.txt" compression="squashfs" extra_kargs="NONE" container_image=image polkit="1": \
+@build image=default_image livesys="1" flatpaks_file="src/flatpaks.example.txt" compression="squashfs" extra_kargs="NONE" container_image=image polkit="1" flatpak_image="": \
     checkroot \
     (show-config image livesys flatpaks_file compression extra_kargs container_image polkit) \
     clean \
@@ -434,7 +463,7 @@ iso:
     (rootfs image) \
     (hook-pre-initramfs HOOK_pre_initramfs) \
     initramfs \
-    (rootfs-include-flatpaks flatpaks_file) \
+    (rootfs-include-flatpaks flatpaks_file flatpak_image) \
     (rootfs-include-polkit polkit) \
     (rootfs-install-livesys-scripts livesys) \
     (rootfs-include-container container_image image) \
@@ -448,7 +477,7 @@ iso:
     mv ./output.iso {{ justfile_dir() }} &>/dev/null
 
 
-@show-config image livesys flatpaks_file compression extra_kargs container_image polkit:
+@show-config image livesys flatpaks_file compression extra_kargs container_image polkit flatpak_image:
     echo "Using the following configuration:"
     echo "{{ style('warning') }}################################################################################{{ NORMAL }}"
     echo "PODMAN             := {{ PODMAN }}"
@@ -466,6 +495,7 @@ iso:
     echo "extra_kargs        := {{ extra_kargs }}"
     echo "container_image    := {{ container_image || image }}"
     echo "polkit             := {{ polkit }}"
+    echo "flatpak_image      := {{ flatpak_image }}"
     echo "CI                 := {{ env('CI', '') }}"
     echo "ARCH               := {{ arch }}"
     echo "{{ style('warning') }}################################################################################{{ NORMAL }}"

@@ -31,6 +31,10 @@ inputs:
     description: Path to a file with a newline separated flatpak apps list to be installed in the rootfs.
     required: false
     default: none
+  flatpak-image:
+    description: OCI image containing the flatpak repo to be used as a source.
+    required: false
+    default: ""
   container-image:
     description: Container image that will be installed onto the target system (can be different from rootfs)
     required: false
@@ -74,7 +78,10 @@ runs:
         HOOK_PRE_INITRAMFS: ${{ inputs.hook-pre-initramfs }}
         CONTAINER_IMAGE: ${{ inputs.container-image }}
         EXTRA_KARGS: ${{ inputs.kargs }}
+        CONTAINER_IMAGE: ${{ inputs.container-image }}
+        EXTRA_KARGS: ${{ inputs.kargs }}
         TITANOBOA_BUILDER_DISTRO: ${{ inputs.builder-distro }}
+        FLATPAK_IMAGE: ${{ inputs.flatpak-image }}
       shell: bash
       run: |
         set -euxo pipefail
@@ -91,8 +98,9 @@ runs:
           HOOK_post_rootfs="${HOOK_POST_ROOTFS}" \
           HOOK_pre_initramfs="${HOOK_PRE_INITRAMFS}" \
           TITANOBOA_BUILDER_DISTRO="${TITANOBOA_BUILDER_DISTRO}" \
+          TITANOBOA_BUILDER_DISTRO="${TITANOBOA_BUILDER_DISTRO}" \
           $just build \
-          "${IMAGE_REF}" "${USE_LIVESYS}" "${FLATPAKS_LIST}" "${COMPRESSION}" "${EXTRA_KARGS}" "${CONTAINER_IMAGE}" "${ADD_POLKIT}"
+          "${IMAGE_REF}" "${USE_LIVESYS}" "${FLATPAKS_LIST}" "${COMPRESSION}" "${EXTRA_KARGS}" "${CONTAINER_IMAGE}" "${ADD_POLKIT}" "${FLATPAK_IMAGE}"
 
         # Fix iso file permisions
         sudo chown $(id -u):$(id -g) ./output.iso
